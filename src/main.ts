@@ -7,6 +7,7 @@ import {
 	TAbstractFile,
 	TFile,
 	TFolder,
+	ItemView,
 } from "obsidian";
 import CanvasNode, {
 	TCanvasData,
@@ -85,7 +86,9 @@ export default class FolderCanvasPlugin extends Plugin {
 						.setIcon("palette")
 						.onClick(async () => this.triggerCommandById());
 				});
-				if (view.getViewType() === "canvas") {
+
+				const activeView = this.app.workspace.getActiveViewOfType(ItemView);
+				if (activeView && activeView.getViewType() === "canvas") {
 					menu.addItem((item) => {
 						item.setTitle("Create and Add Canvas")
 							.setIcon("palette") // Or "plus-circle" / "file-plus"
