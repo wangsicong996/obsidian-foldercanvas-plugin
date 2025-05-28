@@ -1,49 +1,43 @@
-name: Release Obsidian Plugin
+name: Release Obsidian plugin
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version (e.g., v1.0.0)"
-        required: true
-        default: "v1.0.0"
+    push:
+        tags:
+            - "*"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+    build:
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+        steps:
+            - uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18.x"
+            - name: Use Node.js
+              uses: actions/setup-node@v3
+              with:
+                  node-version: "18.x"
 
-      - name: Install dependencies and build plugin
-        run: |
-          npm install
-          npm run build
+            - name: Build plugin
+              run: |
+                  npm install
+                  npm run build
 
-      - name: Verify build output
-        run: |
-          echo "Listing dist directory:"
-          ls -la dist/ || echo "dist directory not found"
-          echo "Listing root directory:"
-          ls -la ./
-          test -f ./dist/main.js || (echo "main.js not found" && exit 1)
-          test -f ./manifest.json || (echo "manifest.json not found" && exit 1)
+            - name: Upload build artifacts
+              uses: actions/upload-artifact@v3
+              with:
+                  name: foldercanvas-plugin-build
+                  path: |
+                      main.js
+                      manifest.json
+                      styles.css
 
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${{ github.event.inputs.version }}"
-          echo "Creating release with tag: $tag"
-          gh release create "$tag" \
-            --title "$tag" \
-            --draft \
-            ./dist/main.js \
-            ./manifest.json
-          echo "Release created successfully"
+            - name: Create release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  tag="${GITHUB_REF#refs/tags/}"
+
+                  gh release create "$tag" \
+                    --title="$tag" \
+                    --draft \
+                    main.js manifest.json
