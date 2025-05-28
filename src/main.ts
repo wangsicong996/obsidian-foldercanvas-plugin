@@ -85,6 +85,13 @@ export default class FolderCanvasPlugin extends Plugin {
 						.setIcon("palette")
 						.onClick(async () => this.triggerCommandById());
 				});
+				if (view.getViewType() === "canvas") {
+					menu.addItem((item) => {
+						item.setTitle("Create and Add Canvas")
+							.setIcon("palette") // Or "plus-circle" / "file-plus"
+							.onClick(async () => this.createAndEmbedNewCanvas());
+					});
+				}
 			})
 		);
 
@@ -126,6 +133,115 @@ export default class FolderCanvasPlugin extends Plugin {
 				})
 			);
 		});
+	}
+
+	async createAndEmbedNewCanvas() {
+		const canvasTmpFolderPath = "canvas-tmp";
+
+		try {
+			let folder = this.app.vault.getAbstractFileByPath(canvasTmpFolderPath);
+			if (!folder || !(folder instanceof TFolder)) {
+				await this.app.vault.createFolder(canvasTmpFolderPath);
+				folder = this.app.vault.getAbstractFileByPath(canvasTmpFolderPath);
+				if (!folder) {
+					new Notice("Failed to create 'canvas-tmp' folder.");
+					return;
+				}
+				console.log("'canvas-tmp' folder created.");
+			}
+		} catch (error) {
+			console.error("Error creating 'canvas-tmp' folder:", error);
+			new Notice("Error creating 'canvas-tmp' folder. Check console for details.");
+			return;
+		}
+
+		const fileName = `new-canvas-${Date.now()}.canvas`;
+		const newlyCreatedCanvasPath = `${canvasTmpFolderPath}/${fileName}`;
+
+		let newlyCreatedCanvasFile: TFile;
+		try {
+			newlyCreatedCanvasFile = await this.app.vault.create(
+				newlyCreatedCanvasPath,
+				JSON.stringify({ nodes: [], edges: [] }, null, 2)
+			);
+			new Notice(`New canvas created: ${newlyCreatedCanvasFile.name}`);
+			console.log(`New canvas created: ${newlyCreatedCanvasPath}`);
+		} catch (error) {
+			console.error(`Error creating new canvas file '${newlyCreatedCanvasPath}':`, error);
+			new Notice(`Failed to create new canvas '${fileName}'. Check console.`);
+			return;
+		}
+
+		// --- Modifications for embedding the new canvas start here ---
+
+		// Get active canvas
+		const activeFile = this.app.workspace.getActiveFile();
+		if (!activeFile || activeFile.extension !== "canvas") {
+			new Notice("The current view is not a canvas. Cannot embed new canvas.");
+			// Optionally, open the newly created canvas if the current view is not a canvas
+			// or if it's preferred not to leave it un-embedded.
+			// For now, just return as per instruction.
+			return;
+		}
+		const currentCanvasFile: TFile = activeFile;
+
+		// Read active canvas data
+		let currentCanvasData: TCanvasData;
+		try {
+			const canvasContent = await this.app.vault.read(currentCanvasFile);
+			currentCanvasData = JSON.parse(canvasContent);
+		} catch (error) {
+			console.error("Error reading or parsing current canvas data:", error);
+			new Notice("Failed to read current canvas data. Check console.");
+			return;
+		}
+
+		// Determine position for the new node
+		let maxX = 0;
+		let maxY = 0;
+		if (currentCanvasData.nodes && currentCanvasData.nodes.length > 0) {
+			currentCanvasData.nodes.forEach((node: TCanvasNode) => {
+				maxX = Math.max(maxX, node.x + node.width);
+				maxY = Math.max(maxY, node.y + node.height);
+			});
+		}
+		
+		const nodeSpacing = this.settings.nodeSpacing || 20;
+		const newNodeX = currentCanvasData.nodes && currentCanvasData.nodes.length > 0 ? maxX + nodeSpacing : nodeSpacing;
+		// For Y, let's place it at the top if canvas is empty, or below existing nodes.
+		// The previous logic for maxY was taking height into account, which is good for subsequent nodes.
+		// If we want a more compact layout or a specific placement strategy (e.g. always top-left available spot), this could be more complex.
+		// For simplicity, using maxY + nodeSpacing if not empty, otherwise nodeSpacing.
+		// This positions the new node to the right of existing content, or at the top-left if the canvas is empty.
+		const newNodeY = currentCanvasData.nodes && currentCanvasData.nodes.length > 0 ? maxY + nodeSpacing : nodeSpacing;
+
+
+		// Create new canvas node object
+		const newNodeId = "node-" + Date.now(); 
+		const newCanvasNode: TCanvasNode = {
+			id: newNodeId,
+			x: newNodeX,
+			y: newNodeY,
+			width: this.settings.nodeWidth, 
+			height: this.settings.nodeHeight, 
+			type: "file",
+			file: newlyCreatedCanvasPath, 
+		};
+
+		// Add to active canvas
+		if (!currentCanvasData.nodes) {
+			currentCanvasData.nodes = [];
+		}
+		currentCanvasData.nodes.push(newCanvasNode);
+
+		// Save active canvas
+		try {
+			await this.app.vault.modify(currentCanvasFile, JSON.stringify(currentCanvasData, null, 2));
+			new Notice(`Canvas '${newlyCreatedCanvasFile.name}' embedded successfully into '${currentCanvasFile.name}'.`);
+		} catch (error) {
+			console.error("Error saving modified canvas data:", error);
+			new Notice("Failed to save updated canvas. Check console.");
+		}
 	}
 
 	async loadSettings() {
