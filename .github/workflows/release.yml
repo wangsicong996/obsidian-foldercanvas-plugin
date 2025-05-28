@@ -1,9 +1,18 @@
-name: Release Obsidian plugin
+name: Release Obsidian Plugin
 
 on:
-    push:
-        tags:
-            - "*"
+
+  workflow_dispatch:
+
+    inputs:
+
+      version:
+
+        description: "Release version (e.g., v1.0.0)"
+
+        required: true
+
+        default: "v1.0.0"
 
 jobs:
     build:
